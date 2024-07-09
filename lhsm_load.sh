@@ -24,38 +24,40 @@ echo import files to lustre to path "$lustre_mnt_path" with list file path "$imp
 loop_idx=1
 task_done=0
 
-run_task:
+while true; do
 
-echo loop "$loop_idx" start
-date
+	echo loop "$loop_idx" start
+	date
 
-list_num=`find $import_list_path -type f | wc -l`
-if [ $list_num -eq 0 ];
-then
-    echo no list file to process in directory "$import_list_path"
-    task_done=1
-else
-    find $import_list_path -type f -print0 | xargs -0 -n 1 -P 8 -I {} /opt/tgstor/bin/lhsm_import $lustre_mnt_path {} $batch_size
-fi
+	list_num=`find $import_list_path -type f | wc -l`
+	if [ $list_num -eq 0 ];
+	then
+		echo no list file to process in directory "$import_list_path"
+		task_done=1
+	else
+		find $import_list_path -type f -print0 | xargs -0 -n 1 -P 8 -I {} build/lhsm_import $lustre_mnt_path {} $batch_size
+	fi
 
-echo loop "$loop_idx" finished
+	echo loop "$loop_idx" finished
 
-# check if import task finised, ie. all of list file processed
-list_num=`find $import_list_path -type f | wc -l`
-if [ $list_num -eq 0 ];
-then
-    task_done=1
-fi
+	# check if import task finised, ie. all of list file processed
+	list_num=`find $import_list_path -type f | wc -l`
+	if [ $list_num -eq 0 ];
+	then
+		task_done=1
+	fi
 
-if [ $task_done -eq 1 ];
-then
-    echo import files to lustre to path "$lustre_mnt_path" with list file path "$import_list_path" finished
-else
-    date
-    echo error happend in import, try again
-    sleep 5
-    goto run_task
-fi
+	if [ $task_done -eq 1 ];
+	then
+		echo import files to lustre to path "$lustre_mnt_path" with list file path "$import_list_path" finished
+		break
+	else
+		date
+		echo error happend in import, try again
+		sleep 5
+	fi
+
+done
 
 date
 exit 0
