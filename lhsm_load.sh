@@ -40,6 +40,13 @@ fi
 
 echo loop "$loop_idx" finished
 
+# check if import task finised, ie. all of list file processed
+list_num=`find $import_list_path -type f | wc -l`
+if [ $list_num -eq 0 ];
+then
+    task_done=1
+fi
+
 if [ $task_done -eq 1 ];
 then
     echo import files to lustre to path "$lustre_mnt_path" with list file path "$import_list_path" finished
