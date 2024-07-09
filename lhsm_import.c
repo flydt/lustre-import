@@ -7,7 +7,6 @@
 #include <lustre/lustreapi.h>
 #include <libgen.h>
 #include <pthread.h>
-#include <semaphore.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 
@@ -17,7 +16,6 @@ typedef struct
 	struct stat *st_hsm_root;
 	char *import_list;
 	int import_size;
-	sem_t *sem_p;
 	pthread_t tid;
 	int rc;
 } lhsm_task_ctl;
@@ -95,7 +93,6 @@ void * lhsm_import_one_batch(void * arg)
 		}
 	}
 
-	sem_post(task_ctl_p->sem_p);
 	return NULL;
 }
 
@@ -157,8 +154,6 @@ int main(int argc, char **argv)
 	char *cur_ptr = addr;
 	bool quit_loop = false;
 	bool next_loop = true;
-	sem_t sem_task;
-	sem_init(&sem_task, 0, 0);
 	for (;;)
 	{
 		batch_ctl[batch_idx].import_list = (char *)malloc(PATH_MAX * batch_size);
@@ -169,7 +164,6 @@ int main(int argc, char **argv)
 		}
 		batch_ctl[batch_idx].hsm_import_dir = hsm_import_root;
 		batch_ctl[batch_idx].st_hsm_root = &st_list;
-		batch_ctl[batch_idx].sem_p = &sem_task;
 		batch_ctl[batch_idx].rc = 0;
 		char *cur_dst = batch_ctl[batch_idx].import_list;
 		next_loop = false;
@@ -225,8 +219,6 @@ task_done:
 
 	if (batch_idx)
 	{
-		sem_wait(&sem_task);
-
 		for (int i = 0; i < batch_idx; i++)
 		{
 			int rc1 = pthread_join(batch_ctl[i].tid, NULL);
@@ -249,8 +241,6 @@ task_done:
 			printf("failed to delete import list file '%s'", hsm_import_list);
 		}
 	}
-
-	sem_destroy(&sem_task);
 
 	return rc;
 }
