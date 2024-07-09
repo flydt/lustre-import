@@ -1,2 +1,1 @@
-#lustre-import
-# lustre-import
+import files to lustre by list file
