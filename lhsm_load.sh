@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 #
-# script to import bucket to lustre directory
-# s3_importx.sh
+# script to import files in lists to lustre directory
+# lhsm_load.sh
 
 if [ $# -lt 2 ];
 then
