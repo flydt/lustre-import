@@ -35,7 +35,7 @@ while true; do
 		echo no list file to process in directory "$import_list_path"
 		task_done=1
 	else
-		find $import_list_path -type f -print0 | xargs -0 -n 1 -P 8 -I {} build/lhsm_import $lustre_mnt_path {} $batch_size
+		find $import_list_path -type f -print0 | xargs -0 -P 8 -I {} build/lhsm_import $lustre_mnt_path {} $batch_size
 	fi
 
 	echo loop "$loop_idx" finished
