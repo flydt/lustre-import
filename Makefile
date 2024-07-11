@@ -8,8 +8,8 @@ ODIR=./build
 
 OBJ = $(pathsubst %, $(ODIR)/%)
 
-lhsm_import: lhsm_import.o
-	$(CC) -o $(ODIR)/lhsm_import $(ODIR)/lhsm_import.o $(LIBS)
+lhsm_import: lhsm_import.o tlog.o
+	$(CC) -o $(ODIR)/lhsm_import $(ODIR)/lhsm_import.o $(ODIR)/tlog.o $(LIBS)
 
 clean:
 	rm -fr build/*
