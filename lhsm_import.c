@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 
+#include "tlog.h"
+
 typedef struct
 {
 	char *hsm_import_dir;
@@ -25,7 +27,7 @@ static int hsm_root_st_mode(const char *hsm_import_dir, struct stat *st_hsm_root
 	int rc = stat(hsm_import_dir, st_hsm_root);
 	if (rc)
 	{
-		printf("cannot run stat on hsm import path '%s'", hsm_import_dir);
+		tlog_error("cannot run stat on hsm import path '%s'", hsm_import_dir);
 	}
 	else
 	{
@@ -65,7 +67,7 @@ inline static int hsm_import_one(const char *full_path, const char *src_nm, cons
 		// skip exist file
 		if (rc1 != -1)
 		{
-			printf("already import '%s' from '%s'", full_path, src_nm);
+			tlog_error("already import '%s' from '%s'", full_path, src_nm);
 			return 0;
 		}
 	}
@@ -100,11 +102,18 @@ int main(int argc, char **argv)
 {
 	int rc = 0;
 	char cmd_name[PATH_MAX];
+	const int log_size_max = 1024 * 1024 * 50;
+	const int log_max = 50;
+
+	// initialize log parameters
+	rc = tlog_init("/var/log/hsm_import.log", log_size_max, log_max, 0, 0);
+	if (rc) return rc;
 
 	if (argc != 4)
 	{
-		printf("'%s import_path list_file batch_size'", cmd_name);
-		return ENOEXEC;
+		tlog_error("'%s import_path list_file batch_size'", cmd_name);
+		rc = ENOEXEC;
+		goto task_done;
 	}
 
 	struct stat st_hsm_root;
@@ -116,26 +125,25 @@ int main(int argc, char **argv)
 	rc = hsm_root_st_mode(hsm_import_root, &st_hsm_root);
 	if (rc)
 	{
-		printf("failed to access import directory '%s'", hsm_import_root);
-		return rc;
+		tlog_error("failed to access import directory '%s'", hsm_import_root);
+		goto task_done;
 	}
 
-	int fd;
+	int fd = -1;
 	fd = open(hsm_import_list, O_RDONLY);
 	if (fd == -1)
 	{
 		rc = EIO;
-		printf("failed to access import list file '%s'", hsm_import_list);
-		return rc;
+		tlog_error("failed to access import list file '%s'", hsm_import_list);
+		goto task_done;
 	}
 
 	struct stat st_list;
 	if (fstat(fd, &st_list) == -1)
 	{
 		rc = EIO;
-		printf("failed to stat import list file '%s'", hsm_import_list);
-		close(fd);
-		return rc;
+		tlog_error("failed to stat import list file '%s'", hsm_import_list);
+		goto task_done;
 	}
 
 	char *addr;
@@ -143,9 +151,8 @@ int main(int argc, char **argv)
 	if (addr == MAP_FAILED)
 	{
 		rc = EIO;
-		printf("failed to mmap import list file '%s'", hsm_import_list);
-		close(fd);
-		return rc;
+		tlog_error("failed to mmap import list file '%s'", hsm_import_list);
+		goto task_done;
 	}
 
 	char line_buf[PATH_MAX], full_path[PATH_MAX];
@@ -159,8 +166,9 @@ int main(int argc, char **argv)
 		batch_ctl[batch_idx].import_list = (char *)malloc(PATH_MAX * batch_size);
 		if (batch_ctl[batch_idx].import_list == NULL)
 		{
-			printf("failed to allocate memory for batch import task");
-			return ENOMEM;
+			tlog_error("failed to allocate memory for batch import task");
+			rc = ENOMEM;
+			goto task_done;
 		}
 		batch_ctl[batch_idx].hsm_import_dir = hsm_import_root;
 		batch_ctl[batch_idx].st_hsm_root = &st_list;
@@ -215,7 +223,10 @@ task_done:
 	{
 		munmap(addr, st_list.st_size);
 	}
-	close(fd);
+	if (fd != -1)
+	{
+		close(fd);
+	}
 
 	if (batch_idx)
 	{
@@ -224,7 +235,7 @@ task_done:
 			int rc1 = pthread_join(batch_ctl[i].tid, NULL);
 			if (rc1)
 			{
-				printf("failed to join thread '%d'", batch_ctl[i].tid);
+				tlog_error("failed to join thread '%d'", batch_ctl[i].tid);
 				rc++;
 			}
 			free(batch_ctl[i].import_list);
@@ -238,9 +249,11 @@ task_done:
 	{
 		if (remove(hsm_import_list))
 		{
-			printf("failed to delete import list file '%s'", hsm_import_list);
+			tlog_error("failed to delete import list file '%s'", hsm_import_list);
 		}
 	}
+
+	tlog_exit();
 
 	return rc;
 }
