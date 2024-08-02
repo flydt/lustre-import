@@ -22,6 +22,61 @@ typedef struct
 	int rc;
 } lhsm_task_ctl;
 
+int mkdir_recursive(const char *dir, const mode_t mode) {
+	char tmp[PATH_MAX];
+	struct stat sb;
+	size_t len;
+
+	len = strnlen (dir, PATH_MAX);
+	if (len == 0 || len == PATH_MAX) {
+		return -1;
+	}
+	strcpy(tmp, dir);
+
+	/* remove trailing slash */
+	if (tmp[len - 1] == '/') {
+		tmp[len - 1] = '\0';
+	}
+
+	/* check if path exists and is a directory */
+	if (stat (tmp, &sb) == 0) {
+		if (S_ISDIR (sb.st_mode)) {
+			return 0;
+		}
+	}
+
+	/* recursive mkdir */
+	for (char *p = tmp + 1; *p; p++) {
+		if (*p == '/') {
+			*p = 0;
+			/* test path */
+			if (stat(tmp, &sb) != 0) {
+				/* path does not exist - create directory */
+				if (mkdir(tmp, mode) < 0) {
+					return -1;
+				}
+			} else if (!S_ISDIR(sb.st_mode)) {
+				/* not a directory */
+				return -1;
+			}
+			*p = '/';
+		}
+	}
+
+	/* test path */
+	if (stat(tmp, &sb) != 0) {
+		/* path does not exist - create directory */
+		if (mkdir(tmp, mode) < 0) {
+			return -1;
+		}
+	} else if (!S_ISDIR(sb.st_mode)) {
+		/* not a directory */
+		return -1;
+	}
+
+	return 0;
+}
+
 static int hsm_root_st_mode(const char *hsm_import_dir, struct stat *st_hsm_root)
 {
 	int rc = stat(hsm_import_dir, st_hsm_root);
@@ -50,6 +105,9 @@ inline static int hsm_import_one(const char *full_path, const char *src_nm, cons
 {
 	struct lu_fid  fid;
 	int rc;
+	bool retry_once = false;
+
+retry_it:
 
 	rc = llapi_hsm_import(full_path,
 						  1,
@@ -63,13 +121,28 @@ inline static int hsm_import_one(const char *full_path, const char *src_nm, cons
 
 	if (rc < 0)
 	{
-		int rc1 = access(full_path, F_OK);
-		// skip exist file
-		if (rc1 != -1)
-		{
-			tlog_error("already import '%s' from '%s'", full_path, src_nm);
-			return 0;
-		}
+			int rc1 = access(full_path, F_OK);
+			// skip exist file
+			if (rc1 != -1)
+			{
+				tlog_error("already import '%s' from '%s'", full_path, src_nm);
+				return 0;
+			}
+			else if (retry_once == false)
+			{
+				// try to create parent directory, and try to import file again
+				// import failed may because parent directory not exist
+				char dir_path[PATH_MAX];
+				char *ptr_path = strrchr(full_path, '/');
+				ptrdiff_t size = ptr_path - full_path;
+				strncpy(dir_path, full_path, size);
+
+				if (mkdir_recursive(dir_path, st_dir->st_mode) == 0)
+				{
+					retry_once = true;
+					goto retry_it;
+				}
+			}
 	}
 	return rc;
 }
